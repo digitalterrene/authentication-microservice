@@ -82,9 +82,9 @@ const fetch_single_user = async (req, res) => {
       // For other fields like "title," use as is
       query = { [key]: value };
     }
-    const dashboard = await db.collection("accounts").findOne(query);
-    if (dashboard) {
-      res.status(200).json(dashboard);
+    const account = await db.collection("accounts").findOne(query);
+    if (account) {
+      res.status(200).json(account);
     } else {
       res
         .status(404)
@@ -108,15 +108,15 @@ const fetch_single_user_by_admin = async (req, res) => {
       // For other fields like "title," use as is
       query = { [key]: value };
     }
-    const dashboard = await db.collection("accounts").findOne(query);
-    if (dashboard) {
+    const account = await db.collection("accounts").findOne(query);
+    if (account) {
       // Parse the requested_data string into an array
       const requestedDataArray = JSON.parse(requested_data);
       // Filter the data based on the requested fields
       const responseData = {};
       requestedDataArray.forEach((field) => {
-        if (dashboard[field]) {
-          responseData[field] = dashboard[field];
+        if (account[field]) {
+          responseData[field] = account[field];
         }
       });
 
@@ -175,11 +175,11 @@ const update_single_user = async (req, res) => {
     }
 
     // Update the document
-    const dashboard = await db
+    const account = await db
       .collection("accounts")
       .findOneAndUpdate(query, { $set: req.body });
 
-    if (dashboard) {
+    if (account) {
       return res.status(200).json({ message: "User updated successfully" });
     } else {
       return res
@@ -236,11 +236,110 @@ const signin_user = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+const upsert_new_user_using_auth_provider = async (req, res) => {
+  try {
+    const db = await connectToDatabase();
 
+    const { email, user_external_uid } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email  is required" });
+    }
+    // Validate email
+    const emailValidation = validateEmail(email);
+    if (emailValidation.error) {
+      return res.status(400).json({ error: emailValidation.error });
+    }
+    // Check if email is already in use
+    const existingUser = await db.collection("accounts").findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: "Email is taken!" });
+    }
+    if (!user_external_uid) {
+      return res.status(400).json({ error: "User uid key is required" });
+    }
+    // Insert the document with encrypted values
+    const result = await db.collection("accounts").insertOne({
+      ...req.body,
+    });
+
+    // Create a token using the document's _id
+    const token = createToken(result.insertedId);
+
+    // Update the document with the generated token
+    await db
+      .collection("accounts")
+      .updateOne({ _id: new ObjectId(result.insertedId) }, { $set: { token } });
+
+    // Set a cookie with user information
+    const insertedUser = await db
+      .collection("accounts")
+      .findOne({ _id: new ObjectId(result.insertedId) });
+    const {
+      name: savedName,
+      auth_provider,
+      user_external_uid: userExternalUid,
+      image: savedImage,
+      _id,
+    } = insertedUser;
+
+    res.status(201).json({
+      name: savedName,
+      email,
+      auth_provider,
+      image: savedImage,
+      user_external_uid: userExternalUid,
+      _id,
+      token,
+    });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+const signin_user_using_auth_provider = async (req, res) => {
+  try {
+    //any keypair they send is whta we use
+
+    const { user_external_uid } = req.body;
+
+    // Input validation
+    if (!user_external_uid) {
+      return res
+        .status(400)
+        .json({ error: "Auth provider's keypair is required" });
+    }
+    const db = await connectToDatabase();
+    const account = await db
+      .collection("account")
+      .findOne({ user_external_uid });
+
+    if (account) {
+      const { name, image, _id, email } = account;
+
+      const token = createToken(_id);
+
+      // Update the document with the generated token
+      await db
+        .collection("account")
+        .updateOne({ _id: new ObjectId(_id) }, { $set: { token } });
+
+      // Set the token in the response
+      res.cookie("authToken", token, { maxAge: 86400000, httpOnly: true });
+      return res.status(200).json({ name, image, _id, token, email });
+    } else {
+      return res.status(404).json({ error: "Failed to fetch account" });
+    }
+  } catch (error) {
+    console.error("Error in accessSingleUser:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
 module.exports = {
   upsert_new_user,
   signin_user,
   update_single_user,
   fetch_single_user,
+  signin_user_using_auth_provider,
+  upsert_new_user_using_auth_provider,
   fetch_single_user_by_admin,
 };

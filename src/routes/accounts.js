@@ -26,6 +26,8 @@ const {
   signin_user,
   update_single_user,
   fetch_single_user_by_admin,
+  upsert_new_user_using_auth_provider,
+  signin_user_using_auth_provider,
 } = require("../controllers");
 
 const router = express.Router();
@@ -36,10 +38,17 @@ const router = express.Router();
 
 // Create or update a user
 router.post("/upsert-new", upsert_new_user);
+router.post(
+  "/external-auth-provider/upsert-new",
+  upsert_new_user_using_auth_provider
+);
 
 // Sign in an existing user
 router.post("/signin-user", signin_user);
-
+router.post(
+  "/external-auth-provider/signin-user",
+  signin_user_using_auth_provider
+);
 /* ---------- GET REQUESTS ----------*/
 
 // Fetch a single user by a given key and value
