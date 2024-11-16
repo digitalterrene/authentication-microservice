@@ -9,7 +9,7 @@ const cors = require("cors");
 
 // Handling CORS policy
 const corsOptions = {
-  origin: ["http://localhost:3000"],
+  origin: ["http://localhost:3000", "https://useraccountdashboard.vercel.app"],
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true, // Allow cookies and HTTP authentication
   optionsSuccessStatus: 204, // No Content response for preflight requests
